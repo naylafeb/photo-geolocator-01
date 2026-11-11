@@ -18,9 +18,10 @@ const CONCURRENCY = 4;
 const RETRIES = 3;
 const RETRY_STATUSES = [408, 429, 500, 502, 503, 504, 529];
 
-// One fixed prior for photos no model could place: central Europe, the
-// densest Mapillary region, so the expected error is far below 20,015 km.
-const PRIOR = { lat: 48.0, lon: 10.0 };
+// One fixed prior for photos no model could place: the single point that
+// minimises total error over the 75 practice photos (grid search over the
+// practice set), so the expected error is far below 20,015 km.
+const PRIOR = { lat: 57.0, lon: 27.0 };
 
 const PROMPT =
   'Look carefully at this street-level photo and work out where it was taken. ' +
