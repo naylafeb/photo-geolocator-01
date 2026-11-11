@@ -220,22 +220,36 @@ async function main(): Promise<number> {
   const byHow: Record<string, number> = {};
   for (const h of how) byHow[h] = (byHow[h] ?? 0) + 1;
   process.stdout.write(`agent: ${guesses.length} of ${photos.length} photos placed (${JSON.stringify(byHow)})\n`);
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      const res = await fetch(`${envUrl}/answers`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ answers: guesses }),
-      });
-      const text = await res.text();
-      process.stdout.write(`agent: answers posted: HTTP ${res.status} ${text.slice(0, 300)}\n`);
-      return res.ok ? 0 : 1;
-    } catch (err) {
-      process.stderr.write(`agent: post answers failed: ${String(err).slice(0, 200)}\n`);
-      if (attempt >= 2) return 1;
-      await sleep(2000 * (attempt + 1));
+  // Post one photo at a time, in photo order, so one refused or failed post
+  // can never lose the answers already accepted. A post is retried only on
+  // a network error or a 5xx; any other refusal is final for that photo.
+  let posted = 0;
+  for (const g of guesses) {
+    let ok = false;
+    for (let attempt = 0; attempt < 3 && !ok; attempt += 1) {
+      if (attempt > 0) await sleep(2000 * attempt);
+      try {
+        const res = await fetch(`${envUrl}/answers`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ answers: [g] }),
+        });
+        if (res.ok) {
+          ok = true;
+          posted += 1;
+        } else {
+          const text = await res.text();
+          process.stderr.write(`agent: post ${g.id} refused (HTTP ${res.status}): ${text.slice(0, 200)}\n`);
+          if (res.status < 500) break;
+        }
+      } catch (err) {
+        process.stderr.write(`agent: post ${g.id} failed: ${String(err).slice(0, 200)}\n`);
+      }
     }
+    if (!ok) process.stderr.write(`agent: giving up on ${g.id} after 3 attempts\n`);
   }
+  process.stdout.write(`agent: posted ${posted} of ${guesses.length} answers\n`);
+  return posted === guesses.length ? 0 : 1;
 }
 
 try {
